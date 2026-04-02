@@ -1,0 +1,7 @@
+{
+  "ACTOR_TOKEN_PORTRAITS.ModuleName": "Actor Token Portraits",
+  "actor-token-portraits.Settings.UseDefaultRender.Name": "Use default FoundryVTT Actors render",
+  "actor-token-portraits.Settings.UseDefaultRender.Hint": "Enable this to stop Actor Token Portraits for your client only and use the default FoundryVTT Actor directory images instead.",
+  "actor-token-portraits.Settings.RespectDnd5ePortraitToggle.Name": "Respect DnD5e portrait toggle",
+  "actor-token-portraits.Settings.RespectDnd5ePortraitToggle.Hint": "Only in dnd5e, limit token portrait replacement to actors with the DnD5e portrait toggle enabled. When disabled, Actor Token Portraits continues to replace portraits for all actors."
+}

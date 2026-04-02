@@ -1,0 +1,28 @@
+# Local agent customization files
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/
+.github/agents/
+.github/skills/
+AGENTS.md
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and archives
+*.log
+*.zip
+*.tar
+*.gz
+
+# Dependency and build outputs
+node_modules/
+dist/
+coverage/
