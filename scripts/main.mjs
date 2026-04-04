@@ -1,9 +1,20 @@
 const MODULE_ID = "actor-token-portraits";
 const SETTING_USE_DEFAULT_RENDER = "useDefaultRender";
 const SETTING_RESPECT_DND5E_PORTRAIT_TOGGLE = "respectDnd5ePortraitToggle";
+const SETTING_WILDCARD_TOKEN_MODE = "wildcardTokenMode";
+
+const WILDCARD_TOKEN_MODE_FIRST = "first";
+const WILDCARD_TOKEN_MODE_RANDOM = "random";
+const WILDCARD_TOKEN_MODE_ACTOR = "actor";
+
+const wildcardTokenImageCache = new Map();
 
 function isModuleEnabled() {
   return !game.settings.get(MODULE_ID, SETTING_USE_DEFAULT_RENDER);
+}
+
+function getWildcardTokenMode() {
+  return game.settings.get(MODULE_ID, SETTING_WILDCARD_TOKEN_MODE);
 }
 
 function isDnd5eSystem() {
@@ -36,14 +47,91 @@ function getActorEntryId(element) {
   return element?.dataset?.documentId ?? element?.dataset?.entryId ?? element?.dataset?.actorId ?? null;
 }
 
-function getActorDirectoryImage(actor) {
-  const tokenImage = actor?.prototypeToken?.texture?.src;
-  if (tokenImage) return tokenImage;
+function getDefaultArtwork(actor) {
+  return actor?.constructor?.getDefaultArtwork?.(actor.toObject()) ?? null;
+}
 
-  if (actor?.img) return actor.img;
+function getActorTokenImage(actor) {
+  return actor?.prototypeToken?.texture?.src ?? null;
+}
 
-  const defaultArtwork = actor?.constructor?.getDefaultArtwork?.(actor.toObject());
-  return defaultArtwork?.texture?.src ?? defaultArtwork?.img ?? null;
+function getActorPortraitFallbackImage(actor) {
+  const defaultArtwork = getDefaultArtwork(actor);
+  return actor?.img ?? defaultArtwork?.img ?? actor?.constructor?.DEFAULT_ICON ?? null;
+}
+
+function getDefaultActorDirectoryFallbackImage(actor) {
+  const defaultArtwork = getDefaultArtwork(actor);
+  return actor?.img ?? defaultArtwork?.texture?.src ?? defaultArtwork?.img ?? actor?.constructor?.DEFAULT_ICON ?? null;
+}
+
+function isWildcardToken(actor) {
+  const tokenImage = getActorTokenImage(actor);
+  if (!tokenImage) return false;
+  return actor?.prototypeToken?.randomImg === true || tokenImage.includes("*");
+}
+
+function getWildcardTokenCacheKey(actor) {
+  return `${actor?.id ?? "unknown"}::${getActorTokenImage(actor) ?? ""}`;
+}
+
+function clearWildcardTokenImageCache(actor = null) {
+  if (!actor) {
+    wildcardTokenImageCache.clear();
+    return;
+  }
+
+  const actorId = actor?.id;
+  if (!actorId) return;
+
+  for (const cacheKey of Array.from(wildcardTokenImageCache.keys())) {
+    if (!cacheKey.startsWith(`${actorId}::`)) continue;
+    wildcardTokenImageCache.delete(cacheKey);
+  }
+}
+
+async function getWildcardTokenImages(actor) {
+  if (!actor?.getTokenImages) return [];
+
+  try {
+    const images = await actor.getTokenImages();
+    if (!Array.isArray(images)) return [];
+    return images.filter(Boolean);
+  } catch (error) {
+    console.warn(`${MODULE_ID} | Failed to resolve wildcard token images for actor ${actor?.id ?? "unknown"}`, error);
+    return [];
+  }
+}
+
+function getCachedRandomWildcardTokenImage(actor, images) {
+  const cacheKey = getWildcardTokenCacheKey(actor);
+  const cachedImage = wildcardTokenImageCache.get(cacheKey);
+  if (cachedImage && images.includes(cachedImage)) return cachedImage;
+
+  const randomImage = images[Math.floor(Math.random() * images.length)];
+  wildcardTokenImageCache.set(cacheKey, randomImage);
+  return randomImage;
+}
+
+async function getActorDirectoryImage(actor) {
+  const tokenImage = getActorTokenImage(actor);
+  if (!tokenImage) return getDefaultActorDirectoryFallbackImage(actor);
+
+  if (!isWildcardToken(actor)) return tokenImage;
+
+  const wildcardTokenMode = getWildcardTokenMode();
+  if (wildcardTokenMode === WILDCARD_TOKEN_MODE_ACTOR) {
+    return getActorPortraitFallbackImage(actor);
+  }
+
+  const tokenImages = await getWildcardTokenImages(actor);
+  if (!tokenImages.length) return getActorPortraitFallbackImage(actor);
+
+  if (wildcardTokenMode === WILDCARD_TOKEN_MODE_RANDOM) {
+    return getCachedRandomWildcardTokenImage(actor, tokenImages);
+  }
+
+  return tokenImages[0];
 }
 
 function hasFlattenedKey(flattenedChanged, key) {
@@ -73,7 +161,7 @@ function rerenderOpenActorDirectories() {
   }
 }
 
-function updateActorEntryPortrait(actor, app) {
+async function updateActorEntryPortrait(actor, app) {
   if (!shouldOverrideActorDirectoryImage(actor)) return;
 
   const root = getApplicationRootElement(app);
@@ -88,7 +176,7 @@ function updateActorEntryPortrait(actor, app) {
   const entryElements = root.querySelectorAll(selector);
   if (!entryElements.length) return;
 
-  const image = getActorDirectoryImage(actor);
+  const image = await getActorDirectoryImage(actor);
   if (!image) return;
 
   for (const element of entryElements) {
@@ -98,36 +186,34 @@ function updateActorEntryPortrait(actor, app) {
   }
 }
 
-function refreshOpenActorDirectories(actor) {
+async function refreshOpenActorDirectories(actor) {
   const directories = [ui.actors, ui.actors?.popout].filter(Boolean);
-  for (const directory of directories) {
-    updateActorEntryPortrait(actor, directory);
-  }
+  await Promise.all(directories.map((directory) => updateActorEntryPortrait(actor, directory)));
 }
 
-function applyTokenPortraits(app, html) {
+async function applyTokenPortraits(app, html) {
   if (!isModuleEnabled()) return;
 
   const root = getRenderedRootElement(html);
   if (!root) return;
 
   const entryElements = root.querySelectorAll("[data-document-id], [data-entry-id], [data-actor-id]");
-  for (const element of entryElements) {
+  await Promise.all(Array.from(entryElements, async (element) => {
     const actorId = getActorEntryId(element);
-    if (!actorId) continue;
+    if (!actorId) return;
 
     const actor = game.actors?.get(actorId);
-    if (!actor) continue;
-    if (!shouldOverrideActorDirectoryImage(actor)) continue;
+    if (!actor) return;
+    if (!shouldOverrideActorDirectoryImage(actor)) return;
 
-    const image = getActorDirectoryImage(actor);
-    if (!image) continue;
+    const image = await getActorDirectoryImage(actor);
+    if (!image) return;
 
     const portrait = element.querySelector("img");
-    if (!portrait || portrait.getAttribute("src") === image) continue;
+    if (!portrait || portrait.getAttribute("src") === image) return;
 
     portrait.setAttribute("src", image);
-  }
+  }));
 }
 
 function updateDnd5ePortraitToggleSettingState(app, html) {
@@ -168,6 +254,24 @@ Hooks.once("init", () => {
     }
   });
 
+  game.settings.register(MODULE_ID, SETTING_WILDCARD_TOKEN_MODE, {
+    name: `${MODULE_ID}.Settings.WildcardTokenMode.Name`,
+    hint: `${MODULE_ID}.Settings.WildcardTokenMode.Hint`,
+    scope: "client",
+    config: true,
+    type: String,
+    choices: {
+      [WILDCARD_TOKEN_MODE_FIRST]: `${MODULE_ID}.Settings.WildcardTokenMode.Choices.First`,
+      [WILDCARD_TOKEN_MODE_RANDOM]: `${MODULE_ID}.Settings.WildcardTokenMode.Choices.Random`,
+      [WILDCARD_TOKEN_MODE_ACTOR]: `${MODULE_ID}.Settings.WildcardTokenMode.Choices.Actor`
+    },
+    default: WILDCARD_TOKEN_MODE_FIRST,
+    onChange: () => {
+      clearWildcardTokenImageCache();
+      rerenderOpenActorDirectories();
+    }
+  });
+
   game.settings.register(MODULE_ID, SETTING_RESPECT_DND5E_PORTRAIT_TOGGLE, {
     name: `${MODULE_ID}.Settings.RespectDnd5ePortraitToggle.Name`,
     hint: `${MODULE_ID}.Settings.RespectDnd5ePortraitToggle.Hint`,
@@ -190,10 +294,12 @@ Hooks.on("updateActor", (actor, changed) => {
 
   if (!hasRelevantActorDirectoryChange(changed)) return;
 
+  clearWildcardTokenImageCache(actor);
+
   if (isDnd5ePortraitToggleEnabled()) {
     rerenderOpenActorDirectories();
     return;
   }
 
-  refreshOpenActorDirectories(actor);
+  void refreshOpenActorDirectories(actor);
 });

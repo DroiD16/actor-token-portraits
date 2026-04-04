@@ -32,11 +32,27 @@ If token artwork is not available, Character artwork will be used as before.
 
 ## Settings
 
-The module adds two client settings.
+The module adds three client settings.
 
 `Use default FoundryVTT Actors render`
 
 This disables the module for your client and restores the normal Foundry behavior in the Actors directory.
+
+`Wildcard token handling`
+
+This setting decides what to show when an actor's token uses wildcard images.
+
+`Always use the first wildcard image`
+
+The module uses the first image from that token's wildcard list.
+
+`Always use a random wildcard image`
+
+The module picks one image at random from that token's wildcard list.
+
+`Use actor portrait instead`
+
+The module ignores the wildcard token images for that actor and shows the default actor portrait instead.
 
 `Respect DnD5e portrait toggle`
 
