@@ -8,7 +8,7 @@ It is made and tested for Foundry v13.
 
 This module was written with the help of artificial intelligence.
 
-I am a professional programmer and I have general software development experience, but JavaScript is not my main area. Because of that, the code was only validated in a fairly superficial way.
+I am a professional programmer and I have general software development experience, but JavaScript is not my main area. I reviewed the code and did not notice anything obviously problematic, but my JavaScript expertise here is limited.
 
 The scope of this module is very small, so I do not expect serious problems that would affect Foundry in a major way. Still, it should be used with all of the above in mind.
 
